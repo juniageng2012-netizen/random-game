@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crystal Collector Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a2e;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        .game-container {
+            position: relative;
+            width: 800px;
+            height: 800px;
+            background-color: #0f3460;
+            border: 3px solid #00d4ff;
+            display: grid;
+            grid-template-columns: repeat(20, 1fr);
+            grid-template-rows: repeat(20, 1fr);
+            gap: 0;
+            overflow: hidden;
+        }
+
+        .grid-cell {
+            position: relative;
+            border: 1px solid rgba(0, 212, 255, 0.1);
+            background-color: #0f3460;
+        }
+
+        .score-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .primogem-icon {
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+        }
+
+        .player {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
+            border-radius: 50%;
+            border: 2px solid #fff;
+            z-index: 50;
+        }
+
+        .primogem {
+            position: absolute;
+            width: 35px;
+            height: 35px;
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            animation: float 0.6s ease-in-out infinite;
+            z-index: 30;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-5px);
+            }
+        }
+
+        .meteor-warning {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            background-color: rgba(255, 100, 100, 0.3);
+            border: 2px solid rgba(255, 100, 100, 0.8);
+            z-index: 20;
+            animation: pulse-warning 0.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-warning {
+            0%, 100% {
+                opacity: 0.3;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .meteor {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            background: radial-gradient(circle, #ff6b6b 0%, #cc0000 100%);
+            border-radius: 50%;
+            z-index: 40;
+            box-shadow: 0 0 30px rgba(255, 107, 107, 0.8);
+        }
+
+        .paralyzed-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.3);
+            z-index: 150;
+            pointer-events: none;
+            display: none;
+        }
+
+        .paralyzed-overlay.active {
+            display: block;
+        }
+
+        .paralyzed-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.8);
+            pointer-events: none;
+            z-index: 160;
+            display: none;
+        }
+
+        .paralyzed-text.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container" id="gameContainer">
+        <div class="paralyzed-overlay" id="paralyzedOverlay"></div>
+        <div class="paralyzed-text" id="paralyzedText">PARALYZED!</div>
+        <div class="score-display">
+            <div class="primogem-icon"></div>
+            <span id="scoreValue">0</span>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const GRID_SIZE = 20;
+        const GRID_CELL_SIZE = 40; // 800px / 20 = 40px per cell
+        const PLAYER_SPEED = 2; // grids per second
+        const PRIMOGEM_SPAWN_INTERVAL = 5000; // 5 seconds
+        const METEOR_SPAWN_INTERVAL = 7000; // 7 seconds
+        const METEOR_WARNING_TIME = 3000; // 3 seconds before meteor lands
+        const METEOR_SIZE = 3; // 3x3 grid
+        const METEOR_HALF_SIZE = Math.floor(METEOR_SIZE / 2); // 1
+
+        // Game state
+        const game = {
+            player: {
+                gridX: 10,
+                gridY: 10,
+                velocityX: 0,
+                velocityY: 0,
+                isParalyzed: false,
+                paralyzedTimeRemaining: 0
+            },
+            score: 0,
+            primogems: [],
+            meteors: [],
+            meteorWarnings: [],
+            keys: {},
+            gameRunning: true
+        };
+
+        const gameContainer = document.getElementById('gameContainer');
+        const scoreValue = document.getElementById('scoreValue');
+        const paralyzedOverlay = document.getElementById('paralyzedOverlay');
+        const paralyzedText = document.getElementById('paralyzedText');
+
+        // Create grid cells
+        function createGrid() {
+            for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                gameContainer.appendChild(cell);
+            }
+        }
+
+        // Update player visual position
+        function updatePlayerDisplay() {
+            let player = document.getElementById('playerElement');
+            if (!player) {
+                player = document.createElement('div');
+                player.id = 'playerElement';
+                player.className = 'player';
+                gameContainer.appendChild(player);
+            }
+            player.style.left = (game.player.gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 20) + 'px';
+            player.style.top = (game.player.gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 20) + 'px';
+        }
+
+        // Spawn primogem at random location
+        function spawnPrimogem() {
+            const gridX = Math.floor(Math.random() * GRID_SIZE);
+            const gridY = Math.floor(Math.random() * GRID_SIZE);
+            const primogem = {
+                id: Date.now() + Math.random(),
+                gridX: gridX,
+                gridY: gridY,
+                element: null
+            };
+            game.primogems.push(primogem);
+            createPrimosgemElement(primogem);
+        }
+
+        function createPrimosgemElement(primogem) {
+            const element = document.createElement('div');
+            element.className = 'primogem';
+            element.style.left = (primogem.gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 17.5) + 'px';
+            element.style.top = (primogem.gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 17.5) + 'px';
+            gameContainer.appendChild(element);
+            primogem.element = element;
+        }
+
+        // Check if player collides with primogem
+        function checkPrimosgemCollision() {
+            for (let i = game.primogems.length - 1; i >= 0; i--) {
+                const primogem = game.primogems[i];
+                if (game.player.gridX === primogem.gridX && game.player.gridY === primogem.gridY) {
+                    game.score++;
+                    scoreValue.textContent = game.score;
+                    primogem.element.remove();
+                    game.primogems.splice(i, 1);
+                }
+            }
+        }
+
+        // Spawn meteor with warning
+        function spawnMeteor() {
+            const gridX = Math.floor(Math.random() * GRID_SIZE);
+            const gridY = Math.floor(Math.random() * GRID_SIZE);
+            const meteor = {
+                id: Date.now() + Math.random(),
+                gridX: gridX,
+                gridY: gridY,
+                warningElement: null,
+                meteorElement: null,
+                hasLanded: false
+            };
+
+            // Create warning indicator
+            const warningElement = document.createElement('div');
+            warningElement.className = 'meteor-warning';
+            warningElement.style.left = ((gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
+            warningElement.style.top = ((gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
+            gameContainer.appendChild(warningElement);
+            meteor.warningElement = warningElement;
+
+            game.meteorWarnings.push(meteor);
+
+            // Schedule meteor to land
+            setTimeout(() => {
+                landMeteor(meteor);
+            }, METEOR_WARNING_TIME);
+        }
+
+        function landMeteor(meteor) {
+            // Remove warning
+            if (meteor.warningElement) {
+                meteor.warningElement.remove();
+            }
+
+            // Move to active meteors
+            const index = game.meteorWarnings.indexOf(meteor);
+            if (index > -1) {
+                game.meteorWarnings.splice(index, 1);
+            }
+            game.meteors.push(meteor);
+            meteor.hasLanded = true;
+
+            // Create meteor visual
+            const meteorElement = document.createElement('div');
+            meteorElement.className = 'meteor';
+            meteorElement.style.left = ((meteor.gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
+            meteorElement.style.top = ((meteor.gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
+            gameContainer.appendChild(meteorElement);
+            meteor.meteorElement = meteorElement;
+
+            // Check collision
+            checkMeteorCollision(meteor);
+
+            // Remove meteor after a short time
+            setTimeout(() => {
+                if (meteor.meteorElement) {
+                    meteor.meteorElement.remove();
+                }
+                const idx = game.meteors.indexOf(meteor);
+                if (idx > -1) {
+                    game.meteors.splice(idx, 1);
+                }
+            }, 1000);
+        }
+
+        function checkMeteorCollision(meteor) {
+            // Check if player is in the 3x3 meteor impact area
+            const meteorStartX = meteor.gridX - METEOR_HALF_SIZE;
+            const meteorStartY = meteor.gridY - METEOR_HALF_SIZE;
+            const meteorEndX = meteorStartX + METEOR_SIZE;
+            const meteorEndY = meteorStartY + METEOR_SIZE;
+
+            if (
+                game.player.gridX >= meteorStartX &&
+                game.player.gridX < meteorEndX &&
+                game.player.gridY >= meteorStartY &&
+                game.player.gridY < meteorEndY
+            ) {
+                applyMeteorDamage();
+            }
+        }
+
+        function applyMeteorDamage() {
+            let paralyzeDuration;
+            let pointsLost;
+
+            if (game.score <= 10) {
+                paralyzeDuration = 1000;
+                pointsLost = 1;
+            } else if (game.score <= 20) {
+                paralyzeDuration = 2000;
+                pointsLost = 3;
+            } else if (game.score <= 50) {
+                paralyzeDuration = 3000;
+                pointsLost = 5;
+            } else {
+                paralyzeDuration = 5000;
+                pointsLost = 7;
+            }
+
+            // Apply paralysis
+            game.player.isParalyzed = true;
+            game.player.paralyzedTimeRemaining = paralyzeDuration;
+            game.player.velocityX = 0;
+            game.player.velocityY = 0;
+
+            // Show paralyzed overlay
+            paralyzedOverlay.classList.add('active');
+            paralyzedText.classList.add('active');
+
+            // Reduce score
+            game.score = Math.max(0, game.score - pointsLost);
+            scoreValue.textContent = game.score;
+
+            // Remove paralysis after duration
+            setTimeout(() => {
+                game.player.isParalyzed = false;
+                paralyzedOverlay.classList.remove('active');
+                paralyzedText.classList.remove('active');
+            }, paralyzeDuration);
+        }
+
+        // Keyboard input
+        document.addEventListener('keydown', (e) => {
+            game.keys[e.key] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            game.keys[e.key] = false;
+        });
+
+        // Update player velocity based on input
+        function updatePlayerVelocity() {
+            if (game.player.isParalyzed) {
+                game.player.velocityX = 0;
+                game.player.velocityY = 0;
+                return;
+            }
+
+            let newVelocityX = 0;
+            let newVelocityY = 0;
+
+            if (game.keys['ArrowUp'] || game.keys['w'] || game.keys['W']) {
+                newVelocityY = -1;
+            }
+            if (game.keys['ArrowDown'] || game.keys['s'] || game.keys['S']) {
+                newVelocityY = 1;
+            }
+            if (game.keys['ArrowLeft'] || game.keys['a'] || game.keys['A']) {
+                newVelocityX = -1;
+            }
+            if (game.keys['ArrowRight'] || game.keys['d'] || game.keys['D']) {
+                newVelocityX = 1;
+            }
+
+            // Normalize diagonal movement to prevent faster diagonal movement
+            if (newVelocityX !== 0 && newVelocityY !== 0) {
+                const length = Math.sqrt(newVelocityX ** 2 + newVelocityY ** 2);
+                newVelocityX /= length;
+                newVelocityY /= length;
+            }
+
+            game.player.velocityX = newVelocityX;
+            game.player.velocityY = newVelocityY;
+        }
+
+        // Game update loop
+        let lastFrameTime = Date.now();
+        let primosgemSpawnTime = Date.now();
+        let meteorSpawnTime = Date.now();
+
+        function update() {
+            const currentTime = Date.now();
+            const deltaTime = (currentTime - lastFrameTime) / 1000; // Convert to seconds
+            lastFrameTime = currentTime;
+
+            // Update player velocity based on input
+            updatePlayerVelocity();
+
+            // Move player
+            const moveDistance = PLAYER_SPEED * deltaTime;
+            game.player.gridX += game.player.velocityX * moveDistance;
+            game.player.gridY += game.player.velocityY * moveDistance;
+
+            // Clamp player position to grid
+            game.player.gridX = Math.max(0, Math.min(GRID_SIZE - 1, game.player.gridX));
+            game.player.gridY = Math.max(0, Math.min(GRID_SIZE - 1, game.player.gridY));
+
+            // Update player display
+            updatePlayerDisplay();
+
+            // Check primogem collision (using grid position)
+            checkPrimosgemCollision();
+
+            // Spawn primogems
+            if (currentTime - primosgemSpawnTime >= PRIMOGEM_SPAWN_INTERVAL) {
+                spawnPrimogem();
+                primosgemSpawnTime = currentTime;
+            }
+
+            // Spawn meteors
+            if (currentTime - meteorSpawnTime >= METEOR_SPAWN_INTERVAL) {
+                spawnMeteor();
+                meteorSpawnTime = currentTime;
+            }
+
+            requestAnimationFrame(update);
+        }
+
+        // Initialize game
+        function init() {
+            createGrid();
+            updatePlayerDisplay();
+            update();
+
+            // Spawn first primogem and meteor after a short delay
+            setTimeout(() => {
+                spawnPrimogem();
+            }, 1000);
+
+            setTimeout(() => {
+                spawnMeteor();
+            }, 2000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
