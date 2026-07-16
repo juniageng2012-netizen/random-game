@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crystal Collector Game</title>
+    <title>Crystal Collector Game - Cookie Edition</title>
     <style>
         * {
             margin: 0;
@@ -16,7 +16,7 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-color: #1a1a2e;
+            background-color: #3d2817;
             font-family: Arial, sans-serif;
             color: white;
         }
@@ -25,19 +25,24 @@
             position: relative;
             width: 800px;
             height: 800px;
-            background-color: #0f3460;
-            border: 3px solid #00d4ff;
+            background: linear-gradient(135deg, #8b5a2b 0%, #a0522d 50%, #8b6f47 100%);
+            border: 3px solid #5c3d2e;
             display: grid;
             grid-template-columns: repeat(20, 1fr);
             grid-template-rows: repeat(20, 1fr);
             gap: 0;
             overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
         }
 
         .grid-cell {
             position: relative;
-            border: 1px solid rgba(0, 212, 255, 0.1);
-            background-color: #0f3460;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            background: linear-gradient(135deg, #8b5a2b 0%, #9d6b3d 100%);
+        }
+
+        .grid-cell:nth-child(even) {
+            background: linear-gradient(135deg, #a0522d 0%, #8b6f47 100%);
         }
 
         .score-display {
@@ -53,6 +58,7 @@
             align-items: center;
             gap: 10px;
             z-index: 100;
+            border: 2px solid #d4a574;
         }
 
         .primogem-icon {
@@ -97,8 +103,8 @@
             position: absolute;
             width: 120px;
             height: 120px;
-            background-color: rgba(255, 100, 100, 0.3);
-            border: 2px solid rgba(255, 100, 100, 0.8);
+            background-color: rgba(139, 69, 19, 0.4);
+            border: 2px solid rgba(210, 105, 30, 0.8);
             z-index: 20;
             animation: pulse-warning 0.5s ease-in-out infinite;
             transform: translate(-50%, -50%);
@@ -106,10 +112,10 @@
 
         @keyframes pulse-warning {
             0%, 100% {
-                opacity: 0.3;
+                opacity: 0.4;
             }
             50% {
-                opacity: 0.7;
+                opacity: 0.8;
             }
         }
 
@@ -117,11 +123,36 @@
             position: absolute;
             width: 120px;
             height: 120px;
-            background-color: rgba(255, 100, 100, 0.8);
-            border: 2px solid rgba(255, 100, 100, 1);
+            background: radial-gradient(circle at 30% 30%, #d2691e 0%, #8b4513 50%, #5c2e0f 100%);
+            border-radius: 50%;
             z-index: 40;
-            box-shadow: 0 0 20px rgba(255, 100, 100, 0.8);
+            box-shadow: 
+                0 0 20px rgba(210, 105, 30, 0.8),
+                inset -2px -2px 5px rgba(0, 0, 0, 0.5),
+                inset 2px 2px 5px rgba(255, 255, 255, 0.2);
             transform: translate(-50%, -50%);
+        }
+
+        /* Chocolate chip details on cookie */
+        .meteor::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle, #3d2817 8px, transparent 8px),
+                radial-gradient(circle, #3d2817 5px, transparent 5px),
+                radial-gradient(circle, #3d2817 6px, transparent 6px),
+                radial-gradient(circle, #3d2817 7px, transparent 7px),
+                radial-gradient(circle, #3d2817 5px, transparent 5px);
+            background-position: 
+                20px 20px,
+                60px 30px,
+                40px 60px,
+                70px 70px,
+                30px 70px;
+            background-repeat: no-repeat;
+            border-radius: 50%;
         }
 
         .paralyzed-overlay {
@@ -151,6 +182,7 @@
             pointer-events: none;
             z-index: 160;
             display: none;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
         }
 
         .paralyzed-text.active {
@@ -174,8 +206,8 @@
         const GRID_CELL_SIZE = 40; // 800px / 20 = 40px per cell
         const PLAYER_SPEED = 5; // grids per second
         const PRIMOGEM_SPAWN_INTERVAL = 3000; // 3 seconds
-        const METEOR_SPAWN_INTERVAL = 7000; // 7 seconds (targeting meteors)
-        const RANDOM_METEOR_SPAWN_INTERVAL = 10000; // 10 seconds (random meteors)
+        const BASE_METEOR_SPAWN_INTERVAL = 7000; // 7 seconds (targeting meteors)
+        const BASE_RANDOM_METEOR_SPAWN_INTERVAL = 10000; // 10 seconds (random meteors)
         const METEOR_WARNING_TIME = 3000; // 3 seconds before meteor lands
         const METEOR_SIZE = 3; // 3x3 grid
         const METEOR_HALF_SIZE = Math.floor(METEOR_SIZE / 2); // 1
@@ -196,7 +228,13 @@
             meteors: [],
             meteorWarnings: [],
             keys: {},
-            gameRunning: true
+            gameRunning: true,
+            activeMeteorSpawners: {
+                targeting1: true,
+                targeting2: false,
+                random1: true,
+                random2: false
+            }
         };
 
         const gameContainer = document.getElementById('gameContainer');
@@ -264,8 +302,31 @@
                     scoreValue.textContent = game.score;
                     primogem.element.remove();
                     game.primogems.splice(i, 1);
+                    updateMeteorSpawners(); // Check if we need to unlock new meteor spawners
                 }
             }
+        }
+
+        // Update which meteor spawners are active based on score
+        function updateMeteorSpawners() {
+            if (game.score >= 30 && !game.activeMeteorSpawners.targeting2) {
+                game.activeMeteorSpawners.targeting2 = true;
+            }
+            if (game.score >= 50 && !game.activeMeteorSpawners.random2) {
+                game.activeMeteorSpawners.random2 = true;
+            }
+        }
+
+        // Get dynamic spawn interval based on score
+        function getTargetingMeteorInterval() {
+            if (game.score >= 50) return 5000; // 5 seconds at 50+ points
+            if (game.score >= 30) return 5500; // 5.5 seconds at 30+ points
+            return BASE_METEOR_SPAWN_INTERVAL; // 7 seconds default
+        }
+
+        function getRandomMeteorInterval() {
+            if (game.score >= 50) return 8000; // 8 seconds at 50+ points
+            return BASE_RANDOM_METEOR_SPAWN_INTERVAL; // 10 seconds default
         }
 
         // Spawn targeting meteor (locks onto player position)
@@ -474,8 +535,10 @@
         // Game update loop
         let lastFrameTime = Date.now();
         let primosgemSpawnTime = Date.now();
-        let targetingMeteorSpawnTime = Date.now();
-        let randomMeteorSpawnTime = Date.now();
+        let targetingMeteor1SpawnTime = Date.now();
+        let targetingMeteor2SpawnTime = Date.now();
+        let randomMeteor1SpawnTime = Date.now();
+        let randomMeteor2SpawnTime = Date.now();
 
         function update() {
             const currentTime = Date.now();
@@ -507,15 +570,29 @@
             }
 
             // Spawn targeting meteors (lock onto player)
-            if (currentTime - targetingMeteorSpawnTime >= METEOR_SPAWN_INTERVAL) {
+            const targetingInterval = getTargetingMeteorInterval();
+            if (game.activeMeteorSpawners.targeting1 && currentTime - targetingMeteor1SpawnTime >= targetingInterval) {
                 spawnTargetingMeteor();
-                targetingMeteorSpawnTime = currentTime;
+                targetingMeteor1SpawnTime = currentTime;
+            }
+
+            // Spawn second targeting meteor
+            if (game.activeMeteorSpawners.targeting2 && currentTime - targetingMeteor2SpawnTime >= targetingInterval) {
+                spawnTargetingMeteor();
+                targetingMeteor2SpawnTime = currentTime;
             }
 
             // Spawn random meteors
-            if (currentTime - randomMeteorSpawnTime >= RANDOM_METEOR_SPAWN_INTERVAL) {
+            const randomInterval = getRandomMeteorInterval();
+            if (game.activeMeteorSpawners.random1 && currentTime - randomMeteor1SpawnTime >= randomInterval) {
                 spawnRandomMeteor();
-                randomMeteorSpawnTime = currentTime;
+                randomMeteor1SpawnTime = currentTime;
+            }
+
+            // Spawn second random meteor
+            if (game.activeMeteorSpawners.random2 && currentTime - randomMeteor2SpawnTime >= randomInterval) {
+                spawnRandomMeteor();
+                randomMeteor2SpawnTime = currentTime;
             }
 
             requestAnimationFrame(update);
