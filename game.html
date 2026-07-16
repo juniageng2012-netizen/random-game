@@ -117,10 +117,10 @@
             position: absolute;
             width: 120px;
             height: 120px;
-            background: radial-gradient(circle, #ff6b6b 0%, #cc0000 100%);
-            border-radius: 50%;
+            background-color: rgba(255, 100, 100, 0.8);
+            border: 2px solid rgba(255, 100, 100, 1);
             z-index: 40;
-            box-shadow: 0 0 30px rgba(255, 107, 107, 0.8);
+            box-shadow: 0 0 20px rgba(255, 100, 100, 0.8);
             transform: translate(-50%, -50%);
         }
 
@@ -267,10 +267,16 @@
             }
         }
 
-        // Spawn meteor with warning
+        // Spawn meteor with warning (targets current player position)
         function spawnMeteor() {
-            const gridX = Math.floor(Math.random() * GRID_SIZE);
-            const gridY = Math.floor(Math.random() * GRID_SIZE);
+            // Target the player's current position
+            let gridX = Math.round(game.player.gridX);
+            let gridY = Math.round(game.player.gridY);
+
+            // Clamp to valid grid positions
+            gridX = Math.max(0, Math.min(GRID_SIZE - 1, gridX));
+            gridY = Math.max(0, Math.min(GRID_SIZE - 1, gridY));
+
             const meteor = {
                 id: Date.now() + Math.random(),
                 gridX: gridX,
@@ -280,7 +286,7 @@
                 hasLanded: false
             };
 
-            // Create warning indicator (centered on grid)
+            // Create warning indicator (3x3 square centered on target)
             const warningElement = document.createElement('div');
             warningElement.className = 'meteor-warning';
             warningElement.style.left = ((gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
@@ -310,7 +316,7 @@
             game.meteors.push(meteor);
             meteor.hasLanded = true;
 
-            // Create meteor visual (centered on grid)
+            // Create meteor visual (3x3 square centered on target)
             const meteorElement = document.createElement('div');
             meteorElement.className = 'meteor';
             meteorElement.style.left = ((meteor.gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
@@ -340,11 +346,15 @@
             const meteorEndX = meteorStartX + METEOR_SIZE;
             const meteorEndY = meteorStartY + METEOR_SIZE;
 
+            // Round player position to check grid cell
+            const playerGridX = Math.round(game.player.gridX);
+            const playerGridY = Math.round(game.player.gridY);
+
             if (
-                game.player.gridX >= meteorStartX &&
-                game.player.gridX < meteorEndX &&
-                game.player.gridY >= meteorStartY &&
-                game.player.gridY < meteorEndY
+                playerGridX >= meteorStartX &&
+                playerGridX < meteorEndX &&
+                playerGridY >= meteorStartY &&
+                playerGridY < meteorEndY
             ) {
                 applyMeteorDamage();
             }
