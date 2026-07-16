@@ -64,30 +64,32 @@
 
         .player {
             position: absolute;
-            width: 40px;
-            height: 40px;
+            width: 30px;
+            height: 30px;
             background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
             border-radius: 50%;
             border: 2px solid #fff;
             z-index: 50;
+            transform: translate(-50%, -50%);
         }
 
         .primogem {
             position: absolute;
-            width: 35px;
-            height: 35px;
+            width: 30px;
+            height: 30px;
             background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
             clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
             animation: float 0.6s ease-in-out infinite;
             z-index: 30;
+            transform: translate(-50%, -50%);
         }
 
         @keyframes float {
             0%, 100% {
-                transform: translateY(0px);
+                transform: translate(-50%, -50%);
             }
             50% {
-                transform: translateY(-5px);
+                transform: translate(-50%, calc(-50% - 5px));
             }
         }
 
@@ -99,6 +101,7 @@
             border: 2px solid rgba(255, 100, 100, 0.8);
             z-index: 20;
             animation: pulse-warning 0.5s ease-in-out infinite;
+            transform: translate(-50%, -50%);
         }
 
         @keyframes pulse-warning {
@@ -118,6 +121,7 @@
             border-radius: 50%;
             z-index: 40;
             box-shadow: 0 0 30px rgba(255, 107, 107, 0.8);
+            transform: translate(-50%, -50%);
         }
 
         .paralyzed-overlay {
@@ -168,12 +172,13 @@
         // Game constants
         const GRID_SIZE = 20;
         const GRID_CELL_SIZE = 40; // 800px / 20 = 40px per cell
-        const PLAYER_SPEED = 2; // grids per second
+        const PLAYER_SPEED = 5; // grids per second
         const PRIMOGEM_SPAWN_INTERVAL = 5000; // 5 seconds
         const METEOR_SPAWN_INTERVAL = 7000; // 7 seconds
         const METEOR_WARNING_TIME = 3000; // 3 seconds before meteor lands
         const METEOR_SIZE = 3; // 3x3 grid
         const METEOR_HALF_SIZE = Math.floor(METEOR_SIZE / 2); // 1
+        const COLLECTION_RADIUS = 0.3; // How close player needs to be to collect
 
         // Game state
         const game = {
@@ -216,11 +221,12 @@
                 player.className = 'player';
                 gameContainer.appendChild(player);
             }
-            player.style.left = (game.player.gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 20) + 'px';
-            player.style.top = (game.player.gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 20) + 'px';
+            // Center player on the grid position
+            player.style.left = (game.player.gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            player.style.top = (game.player.gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
         }
 
-        // Spawn primogem at random location
+        // Spawn primogem at random location (centered on grid)
         function spawnPrimogem() {
             const gridX = Math.floor(Math.random() * GRID_SIZE);
             const gridY = Math.floor(Math.random() * GRID_SIZE);
@@ -237,8 +243,9 @@
         function createPrimosgemElement(primogem) {
             const element = document.createElement('div');
             element.className = 'primogem';
-            element.style.left = (primogem.gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 17.5) + 'px';
-            element.style.top = (primogem.gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2 - 17.5) + 'px';
+            // Center primogem on the grid position
+            element.style.left = (primogem.gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            element.style.top = (primogem.gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
             gameContainer.appendChild(element);
             primogem.element = element;
         }
@@ -247,7 +254,11 @@
         function checkPrimosgemCollision() {
             for (let i = game.primogems.length - 1; i >= 0; i--) {
                 const primogem = game.primogems[i];
-                if (game.player.gridX === primogem.gridX && game.player.gridY === primogem.gridY) {
+                const distance = Math.sqrt(
+                    Math.pow(game.player.gridX - primogem.gridX, 2) +
+                    Math.pow(game.player.gridY - primogem.gridY, 2)
+                );
+                if (distance < COLLECTION_RADIUS) {
                     game.score++;
                     scoreValue.textContent = game.score;
                     primogem.element.remove();
@@ -269,11 +280,11 @@
                 hasLanded: false
             };
 
-            // Create warning indicator
+            // Create warning indicator (centered on grid)
             const warningElement = document.createElement('div');
             warningElement.className = 'meteor-warning';
-            warningElement.style.left = ((gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
-            warningElement.style.top = ((gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
+            warningElement.style.left = ((gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            warningElement.style.top = ((gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
             gameContainer.appendChild(warningElement);
             meteor.warningElement = warningElement;
 
@@ -299,11 +310,11 @@
             game.meteors.push(meteor);
             meteor.hasLanded = true;
 
-            // Create meteor visual
+            // Create meteor visual (centered on grid)
             const meteorElement = document.createElement('div');
             meteorElement.className = 'meteor';
-            meteorElement.style.left = ((meteor.gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
-            meteorElement.style.top = ((meteor.gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE) + 'px';
+            meteorElement.style.left = ((meteor.gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            meteorElement.style.top = ((meteor.gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
             gameContainer.appendChild(meteorElement);
             meteor.meteorElement = meteorElement;
 
@@ -388,7 +399,7 @@
             game.keys[e.key] = false;
         });
 
-        // Update player velocity based on input
+        // Update player velocity based on input (only horizontal and vertical)
         function updatePlayerVelocity() {
             if (game.player.isParalyzed) {
                 game.player.velocityX = 0;
@@ -410,13 +421,6 @@
             }
             if (game.keys['ArrowRight'] || game.keys['d'] || game.keys['D']) {
                 newVelocityX = 1;
-            }
-
-            // Normalize diagonal movement to prevent faster diagonal movement
-            if (newVelocityX !== 0 && newVelocityY !== 0) {
-                const length = Math.sqrt(newVelocityX ** 2 + newVelocityY ** 2);
-                newVelocityX /= length;
-                newVelocityY /= length;
             }
 
             game.player.velocityX = newVelocityX;
@@ -448,7 +452,7 @@
             // Update player display
             updatePlayerDisplay();
 
-            // Check primogem collision (using grid position)
+            // Check primogem collision
             checkPrimosgemCollision();
 
             // Spawn primogems
