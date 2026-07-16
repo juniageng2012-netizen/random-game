@@ -173,8 +173,9 @@
         const GRID_SIZE = 20;
         const GRID_CELL_SIZE = 40; // 800px / 20 = 40px per cell
         const PLAYER_SPEED = 5; // grids per second
-        const PRIMOGEM_SPAWN_INTERVAL = 5000; // 5 seconds
-        const METEOR_SPAWN_INTERVAL = 7000; // 7 seconds
+        const PRIMOGEM_SPAWN_INTERVAL = 3000; // 3 seconds
+        const METEOR_SPAWN_INTERVAL = 7000; // 7 seconds (targeting meteors)
+        const RANDOM_METEOR_SPAWN_INTERVAL = 10000; // 10 seconds (random meteors)
         const METEOR_WARNING_TIME = 3000; // 3 seconds before meteor lands
         const METEOR_SIZE = 3; // 3x3 grid
         const METEOR_HALF_SIZE = Math.floor(METEOR_SIZE / 2); // 1
@@ -267,8 +268,8 @@
             }
         }
 
-        // Spawn meteor with warning (targets current player position)
-        function spawnMeteor() {
+        // Spawn targeting meteor (locks onto player position)
+        function spawnTargetingMeteor() {
             // Target the player's current position
             let gridX = Math.round(game.player.gridX);
             let gridY = Math.round(game.player.gridY);
@@ -283,14 +284,47 @@
                 gridY: gridY,
                 warningElement: null,
                 meteorElement: null,
-                hasLanded: false
+                hasLanded: false,
+                isRandom: false
             };
 
-            // Create warning indicator (3x3 square centered on target)
+            // Create warning indicator (3x3 square centered on player)
             const warningElement = document.createElement('div');
             warningElement.className = 'meteor-warning';
-            warningElement.style.left = ((gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
-            warningElement.style.top = ((gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            warningElement.style.left = (gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            warningElement.style.top = (gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            gameContainer.appendChild(warningElement);
+            meteor.warningElement = warningElement;
+
+            game.meteorWarnings.push(meteor);
+
+            // Schedule meteor to land
+            setTimeout(() => {
+                landMeteor(meteor);
+            }, METEOR_WARNING_TIME);
+        }
+
+        // Spawn random meteor (no targeting)
+        function spawnRandomMeteor() {
+            // Random position on the grid
+            let gridX = Math.floor(Math.random() * GRID_SIZE);
+            let gridY = Math.floor(Math.random() * GRID_SIZE);
+
+            const meteor = {
+                id: Date.now() + Math.random(),
+                gridX: gridX,
+                gridY: gridY,
+                warningElement: null,
+                meteorElement: null,
+                hasLanded: false,
+                isRandom: true
+            };
+
+            // Create warning indicator (3x3 square at random location)
+            const warningElement = document.createElement('div');
+            warningElement.className = 'meteor-warning';
+            warningElement.style.left = (gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            warningElement.style.top = (gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
             gameContainer.appendChild(warningElement);
             meteor.warningElement = warningElement;
 
@@ -319,8 +353,8 @@
             // Create meteor visual (3x3 square centered on target)
             const meteorElement = document.createElement('div');
             meteorElement.className = 'meteor';
-            meteorElement.style.left = ((meteor.gridX - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
-            meteorElement.style.top = ((meteor.gridY - METEOR_HALF_SIZE) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            meteorElement.style.left = (meteor.gridX * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
+            meteorElement.style.top = (meteor.gridY * GRID_CELL_SIZE + GRID_CELL_SIZE / 2) + 'px';
             gameContainer.appendChild(meteorElement);
             meteor.meteorElement = meteorElement;
 
@@ -440,7 +474,8 @@
         // Game update loop
         let lastFrameTime = Date.now();
         let primosgemSpawnTime = Date.now();
-        let meteorSpawnTime = Date.now();
+        let targetingMeteorSpawnTime = Date.now();
+        let randomMeteorSpawnTime = Date.now();
 
         function update() {
             const currentTime = Date.now();
@@ -471,10 +506,16 @@
                 primosgemSpawnTime = currentTime;
             }
 
-            // Spawn meteors
-            if (currentTime - meteorSpawnTime >= METEOR_SPAWN_INTERVAL) {
-                spawnMeteor();
-                meteorSpawnTime = currentTime;
+            // Spawn targeting meteors (lock onto player)
+            if (currentTime - targetingMeteorSpawnTime >= METEOR_SPAWN_INTERVAL) {
+                spawnTargetingMeteor();
+                targetingMeteorSpawnTime = currentTime;
+            }
+
+            // Spawn random meteors
+            if (currentTime - randomMeteorSpawnTime >= RANDOM_METEOR_SPAWN_INTERVAL) {
+                spawnRandomMeteor();
+                randomMeteorSpawnTime = currentTime;
             }
 
             requestAnimationFrame(update);
@@ -492,8 +533,12 @@
             }, 1000);
 
             setTimeout(() => {
-                spawnMeteor();
+                spawnTargetingMeteor();
             }, 2000);
+
+            setTimeout(() => {
+                spawnRandomMeteor();
+            }, 5000);
         }
 
         init();
